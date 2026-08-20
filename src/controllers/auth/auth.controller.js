@@ -1,5 +1,5 @@
-import User from "../models/user.model.js"
-import { generateToken } from "../lib/utils.js"
+import User from "../../models/user.model.js"
+import { generateToken } from "../../lib/utils.js"
 import bcrypt from "bcryptjs"
 
 export const signup = async (req, res) => {
@@ -36,7 +36,7 @@ export const signup = async (req, res) => {
             })
         } else {
             res.status(400).json({ message: "invalid user data" })
-        }
+        }oll
 
     } catch (error) {
         console.log("error in the message controller", error.message);

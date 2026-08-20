@@ -7,6 +7,9 @@ app.use(express.json())
 import { connectDB } from "./lib/db.js";
 
 import authRoutes from "./routes/auth.route.js"
+import productRoutes from './routes/admin/product.route.js'
+import categoryRoutes from './routes/admin/category.route.js'
+import brandRoutes from './routes/admin/brand.route.js'
 
 dotenv.config();
 const PORT = process.env.PORT
@@ -14,6 +17,9 @@ const PORT = process.env.PORT
 app.use(cookieParser())
 
 app.use("/api/auth", authRoutes)
+app.use("/api/v1/product", productRoutes)
+app.use("/api/v1/category", categoryRoutes)
+app.use("/api/v1/brand", brandRoutes)
 
 app.listen(PORT, ()=>{
     console.log("server is running on PORT:" + PORT)
