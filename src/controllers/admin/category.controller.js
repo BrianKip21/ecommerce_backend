@@ -38,6 +38,31 @@ export const getAllCategories = async (req, res) => {
 
 }
 
+export const getCategoryById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const category = await Category.findById(id);
+
+        if (!category) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        res.status(200).json({
+            data: category
+        });
+
+    } catch (error) {
+        console.log("error in the get category controller", error.message);
+
+        res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+};
+
 export const editCategory = async (req, res) => {
     try {
         const { id } = req.params

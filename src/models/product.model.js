@@ -1,24 +1,16 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
-const ProductSchema = new mongoose.Schema({
-    image: {
+const variantSchema = new mongoose.Schema({
+    sku: {
+        type: String,
+        unique: true,
+        required: true
+    },
+    size: {
         type: String,
         required: true
     },
-    title: {
-        type: String,
-        required: true
-    },
-    description: {
-        type: String,
-        required: true,
-        trim: true
-    },
-    category: {
-        type: String,
-        required: true
-    },
-    brand: {
+    color: {
         type: String,
         required: true
     },
@@ -32,21 +24,63 @@ const ProductSchema = new mongoose.Schema({
         min: 0,
         default: null
     },
-    totalStock: {
+    stock: {
         type: Number,
         required: true,
-        min: 0,
-        default: 0
+        min: 0
+    }
+});
+
+const ProductSchema = new mongoose.Schema({
+    image: {
+        type: String,
+        required: true
     },
+
+    title: {
+        type: String,
+        required: true,
+        trim: true
+    },
+
+    description: {
+        type: String,
+        required: true,
+        trim: true
+    },
+
+    category: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+        required: true
+    },
+
+    brand: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Brand",
+        required: true
+    },
+
+    variants: {
+        type: [variantSchema],
+        required: true
+    },
+
     averageReview: {
         type: Number,
         min: 0,
         max: 5,
         default: 0
-    },
-},
- {timestamps: true}
-)
+    }
+}, {
+    timestamps: true
+});
 
-const Product = mongoose.model("Product", ProductSchema)
+ProductSchema.index(
+    { title: 1, category: 1, brand: 1 },
+    { unique: true }
+);
+
+const Product = mongoose.model("Product", ProductSchema);
+
 export default Product;

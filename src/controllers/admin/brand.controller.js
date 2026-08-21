@@ -38,6 +38,31 @@ export const getAllBrands = async (req, res) => {
 
 }
 
+export const getBrandById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const brand = await Brand.findById(id);
+
+        if (!brand) {
+            return res.status(404).json({
+                message: "Brand not found"
+            });
+        }
+
+        res.status(200).json({
+            data: brand
+        });
+
+    } catch (error) {
+        console.log("error in the get brand controller", error.message);
+
+        res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+};
+
 export const editBrand = async (req, res) => {
     try {
         const { id } = req.params
