@@ -1,6 +1,7 @@
 import Product from "../../models/product.model.js"
 import Category from "../../models/category.model.js"
 import Brand from "../../models/brand.model.js"
+import { generateUniqueSKU } from "../../lib/sku.js";
 
 export const addProduct = async (req, res) => {
     try {
@@ -138,13 +139,7 @@ export const addProduct = async (req, res) => {
                 });
             }
 
-            // Generate SKU
-            const randomPart = Math.random()
-                .toString(36)
-                .substring(2, 8)
-                .toUpperCase();
-
-            const sku = `SKU-${randomPart}`;
+            const sku = await generateUniqueSKU();
 
             processedVariants.push({
                 sku,
