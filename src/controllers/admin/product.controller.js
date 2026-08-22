@@ -1,3 +1,4 @@
+import {StatusCodes} from "http-status-codes"
 import Product from "../../models/product.model.js"
 import Category from "../../models/category.model.js"
 import Brand from "../../models/brand.model.js"
@@ -16,31 +17,31 @@ export const addProduct = async (req, res) => {
 
         // Product validation
         if (!image?.trim()) {
-            return res.status(400).json({
+            return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "Product image must be provided"
             });
         }
 
         if (!title?.trim()) {
-            return res.status(400).json({
+            return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "Product title is required"
             });
         }
 
         if (!description?.trim()) {
-            return res.status(400).json({
+            return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "Product description is required"
             });
         }
 
         if (!category) {
-            return res.status(400).json({
+            return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "Product category is required"
             });
         }
 
         if (!brand) {
-            return res.status(400).json({
+            return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "Product brand is required"
             });
         }
@@ -57,7 +58,7 @@ export const addProduct = async (req, res) => {
             });
         }
         if (!Array.isArray(variants) || variants.length === 0) {
-            return res.status(400).json({
+            return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "At least one product variant is required"
             });
         }
@@ -66,7 +67,7 @@ export const addProduct = async (req, res) => {
         const existingCategory = await Category.findById(category);
 
         if (!existingCategory) {
-            return res.status(404).json({
+            return res.status(StatusCodes.NOT_FOUND).json({
                 message: "Category not found"
             });
         }
@@ -75,7 +76,7 @@ export const addProduct = async (req, res) => {
         const existingBrand = await Brand.findById(brand);
 
         if (!existingBrand) {
-            return res.status(404).json({
+            return res.status(StatusCodes.NOT_FOUND).json({
                 message: "Brand not found"
             });
         }
@@ -88,19 +89,19 @@ export const addProduct = async (req, res) => {
             const { size, color, price, salePrice, stock } = variant;
 
             if (!size?.trim()) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "Variant size is required"
                 });
             }
 
             if (!color?.trim()) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "Variant color is required"
                 });
             }
 
             if (price === undefined || isNaN(price) || price <= 0) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "Variant price must be a positive number"
                 });
             }
@@ -108,20 +109,20 @@ export const addProduct = async (req, res) => {
             if (salePrice !== undefined && salePrice !== null) {
 
                 if (isNaN(salePrice) || salePrice < 0) {
-                    return res.status(400).json({
+                    return res.status(StatusCodes.BAD_REQUEST).json({
                         message: "Sale price must be a non-negative number"
                     });
                 }
 
                 if (salePrice >= price) {
-                    return res.status(400).json({
+                    return res.status(StatusCodes.BAD_REQUEST).json({
                         message: "Sale price must be less than regular price"
                     });
                 }
             }
 
             if (stock === undefined || isNaN(stock) || stock < 0) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "Stock cannot be negative or missing"
                 });
             }
@@ -134,7 +135,7 @@ export const addProduct = async (req, res) => {
             );
 
             if (duplicateVariant) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: `Variant ${color} / ${size} already exists`
                 });
             }
@@ -167,7 +168,7 @@ export const addProduct = async (req, res) => {
             .populate("category", "name")
             .populate("brand", "name");
 
-        return res.status(201).json({
+        return res.status(StatusCodes.CREATED).json({
             success: true,
             data: populatedProduct
         });
@@ -190,7 +191,7 @@ export const getAllProducts = async (req, res) => {
             .populate("category", "name description")
             .populate("brand", "name description");
 
-        return res.status(200).json({
+        return res.status(StatusCodes.OK).json({
             success: true,
             data: productsList
         });
@@ -221,7 +222,7 @@ export const editProduct = async (req, res) => {
         } = req.body;
 
         if (Object.keys(req.body).length === 0) {
-            return res.status(400).json({
+            return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "No fields provided for update"
             });
         }
@@ -231,7 +232,7 @@ export const editProduct = async (req, res) => {
         // Image
         if (image !== undefined) {
             if (!image.trim()) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "Product image cannot be empty"
                 });
             }
@@ -242,7 +243,7 @@ export const editProduct = async (req, res) => {
         // Title
         if (title !== undefined) {
             if (!title.trim()) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "Product title cannot be empty"
                 });
             }
@@ -253,7 +254,7 @@ export const editProduct = async (req, res) => {
         // Description
         if (description !== undefined) {
             if (!description.trim()) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "Product description cannot be empty"
                 });
             }
@@ -266,7 +267,7 @@ export const editProduct = async (req, res) => {
             const existingCategory = await Category.findById(category);
 
             if (!existingCategory) {
-                return res.status(404).json({
+                return res.status(StatusCodes.NOT_FOUND).json({
                     message: "Category not found"
                 });
             }
@@ -279,7 +280,7 @@ export const editProduct = async (req, res) => {
             const existingBrand = await Brand.findById(brand);
 
             if (!existingBrand) {
-                return res.status(404).json({
+                return res.status(StatusCodes.NOT_FOUND).json({
                     message: "Brand not found"
                 });
             }
@@ -291,7 +292,7 @@ export const editProduct = async (req, res) => {
         if (variants !== undefined) {
 
             if (!Array.isArray(variants) || variants.length === 0) {
-                return res.status(400).json({
+                return res.status(StatusCodes.BAD_REQUEST).json({
                     message: "At least one product variant is required"
                 });
             }
@@ -310,19 +311,19 @@ export const editProduct = async (req, res) => {
                 } = variant;
 
                 if (!size?.trim()) {
-                    return res.status(400).json({
+                    return res.status(StatusCodes.BAD_REQUEST).json({
                         message: "Variant size is required"
                     });
                 }
 
                 if (!color?.trim()) {
-                    return res.status(400).json({
+                    return res.status(StatusCodes.BAD_REQUEST).json({
                         message: "Variant color is required"
                     });
                 }
 
                 if (price === undefined || isNaN(price) || price <= 0) {
-                    return res.status(400).json({
+                    return res.status(StatusCodes.BAD_REQUEST).json({
                         message: "Variant price must be a positive number"
                     });
                 }
@@ -330,20 +331,20 @@ export const editProduct = async (req, res) => {
                 if (salePrice !== undefined && salePrice !== null) {
 
                     if (isNaN(salePrice) || salePrice < 0) {
-                        return res.status(400).json({
+                        return res.status(StatusCodes.BAD_REQUEST).json({
                             message: "Sale price must be a non-negative number"
                         });
                     }
 
                     if (salePrice >= price) {
-                        return res.status(400).json({
+                        return res.status(StatusCodes.BAD_REQUEST).json({
                             message: "Sale price must be less than regular price"
                         });
                     }
                 }
 
                 if (stock === undefined || isNaN(stock) || stock < 0) {
-                    return res.status(400).json({
+                    return res.status(StatusCodes.BAD_REQUEST).json({
                         message: "Stock cannot be negative or missing"
                     });
                 }
@@ -356,7 +357,7 @@ export const editProduct = async (req, res) => {
                 );
 
                 if (duplicateVariant) {
-                    return res.status(400).json({
+                    return res.status(StatusCodes.BAD_REQUEST).json({
                         message: `Variant ${color} / ${size} already exists`
                     });
                 }
@@ -389,12 +390,12 @@ export const editProduct = async (req, res) => {
             .populate("brand", "name description");
 
         if (!updateProduct) {
-            return res.status(404).json({
+            return res.status(StatusCodes.NOT_FOUND).json({
                 message: "Product not found"
             });
         }
 
-        return res.status(200).json({
+        return res.status(StatusCodes.OK).json({
             success: true,
             data: updateProduct
         });
@@ -420,12 +421,12 @@ export const getProductById = async (req, res) => {
             .populate("brand", "name description");
 
         if (!product) {
-            return res.status(404).json({
+            return res.status(StatusCodes.NOT_FOUND).json({
                 message: "Product not found"
             });
         }
 
-        return res.status(200).json({
+        return res.status(StatusCodes.OK).json({
             success: true,
             data: product
         });
@@ -447,11 +448,11 @@ export const deleteProduct = async (req, res) => {
         const { id } = req.params
         const product = await Product.findByIdAndDelete(id)
         if (!product) {
-            return res.status(404).json({ message: "product not found" })
+            return res.status(StatusCodes.NOT_FOUND).json({ message: "product not found" })
         }
-        res.status(200).json({ message: "product deleted successfully" })
+        res.status(StatusCodes.OK).json({ message: "product deleted successfully" })
     } catch (error) {
         console.log("error in the delete products controller", error.message);
-        res.status(500).json({ message: "internal server error" });
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: "internal server error" });
     }
 }
