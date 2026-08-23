@@ -1,5 +1,5 @@
 import express from "express"
-import dotenv from "dotenv"
+import "dotenv/config";
 import cookieParser from "cookie-parser"
 const app = express()
 
@@ -12,8 +12,8 @@ import categoryRoutes from './routes/admin/category.route.js'
 import brandRoutes from './routes/admin/brand.route.js'
 import cartRoutes from "./routes/cart.route.js"
 import orderRoutes from "./routes/order.route.js"
+import paymentRoutes from "./routes/payment.route.js"
 
-dotenv.config();
 const PORT = process.env.PORT
 
 app.use(cookieParser())
@@ -24,6 +24,7 @@ app.use("/api/v1/category", categoryRoutes)
 app.use("/api/v1/brand", brandRoutes)
 app.use("/api/v1/cart", cartRoutes)
 app.use("/api/v1/order", orderRoutes)
+app.use("/api/v1/payment", paymentRoutes)
 
 app.listen(PORT, ()=>{
     console.log("server is running on PORT:" + PORT)
