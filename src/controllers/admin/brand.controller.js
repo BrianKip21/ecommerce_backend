@@ -114,14 +114,52 @@ export const editBrand = async (req, res) => {
 
 export const deleteBrand = async (req, res) => {
     try {
-        const { id } = req.params
-        const brand = await Brand.findByIdAndDelete(id)
-        if (!brand) {
-            return res.status(404).json({ message: "brand not found" })
+        const { id } = req.params;
+
+        // Validate brand ID
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                message: "Invalid brand id"
+            });
         }
-        res.status(200).json({ message: "brand deleted successfully" })
+
+        // Check whether any products still use this brand
+        const productsUsingBrand =
+            await Product.countDocuments({
+                brand: id
+            });
+
+        if (productsUsingBrand > 0) {
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                message:
+                    `Cannot delete brand — ${productsUsingBrand} product(s) still use it`
+            });
+        }
+
+        // Delete brand
+        const brand = await Brand.findByIdAndDelete(id);
+
+        if (!brand) {
+            return res.status(StatusCodes.NOT_FOUND).json({
+                message: "Brand not found"
+            });
+        }
+
+        return res.status(StatusCodes.OK).json({
+            success: true,
+            message: "Brand deleted successfully"
+        });
+
     } catch (error) {
-        console.log("error in the delete brand controller", error.message);
-        res.status(500).json({ message: "internal server error" });
+        console.error(
+            "Error in delete brand controller:",
+            error.message
+        );
+
+        return res.status(
+            StatusCodes.INTERNAL_SERVER_ERROR
+        ).json({
+            message: "Internal server error"
+        });
     }
-}
+};

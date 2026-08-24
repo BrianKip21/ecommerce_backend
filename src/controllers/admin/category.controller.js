@@ -115,14 +115,47 @@ export const editCategory = async (req, res) => {
 
 export const deleteCategory = async (req, res) => {
     try {
-        const { id } = req.params
-        const category = await Category.findByIdAndDelete(id)
-        if (!category) {
-            return res.status(404).json({ message: "category not found" })
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                message: "Invalid category id"
+            });
         }
-        res.status(200).json({ message: "category deleted successfully" })
+
+        const productsUsingCategory =
+            await Product.countDocuments({
+                category: id
+            });
+
+        if (productsUsingCategory > 0) {
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                message:
+                    `Cannot delete category — ${productsUsingCategory} product(s) still use it`
+            });
+        }
+
+        const category = await Category.findByIdAndDelete(id);
+
+        if (!category) {
+            return res.status(StatusCodes.NOT_FOUND).json({
+                message: "Category not found"
+            });
+        }
+
+        return res.status(StatusCodes.OK).json({
+            success: true,
+            message: "Category deleted successfully"
+        });
+
     } catch (error) {
-        console.log("error in the delete category controller", error.message);
-        res.status(500).json({ message: "internal server error" });
+        console.error(
+            "Error in delete category controller:",
+            error.message
+        );
+
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            message: "Internal server error"
+        });
     }
-}
+};

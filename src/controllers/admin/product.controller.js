@@ -187,23 +187,242 @@ export const addProduct = async (req, res) => {
 
 export const getAllProducts = async (req, res) => {
     try {
-        const productsList = await Product.find({})
-            .populate("category", "name description")
-            .populate("brand", "name description");
+        const {
+            search,
+            category,
+            brand,
+            minPrice,
+            maxPrice,
+            size,
+            color,
+            sort,
+            page = 1,
+            limit = 20
+        } = req.query;
+
+        const filter = {};
+
+        // ============================================
+        // SEARCH
+        // ============================================
+
+        if (search?.trim()) {
+            const searchTerm = search.trim();
+
+            filter.$or = [
+                {
+                    title: {
+                        $regex: searchTerm,
+                        $options: "i"
+                    }
+                },
+                {
+                    description: {
+                        $regex: searchTerm,
+                        $options: "i"
+                    }
+                }
+            ];
+        }
+
+        // ============================================
+        // CATEGORY
+        // ============================================
+
+        if (category) {
+            if (!mongoose.Types.ObjectId.isValid(category)) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message: "Invalid category id"
+                });
+            }
+
+            filter.category = category;
+        }
+
+        // ============================================
+        // BRAND
+        // ============================================
+
+        if (brand) {
+            if (!mongoose.Types.ObjectId.isValid(brand)) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message: "Invalid brand id"
+                });
+            }
+
+            filter.brand = brand;
+        }
+
+        // ============================================
+        // PRICE VALIDATION
+        // ============================================
+
+        let min;
+        let max;
+
+        if (minPrice !== undefined) {
+            min = Number(minPrice);
+
+            if (!Number.isFinite(min) || min < 0) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message: "minPrice must be a valid non-negative number"
+                });
+            }
+        }
+
+        if (maxPrice !== undefined) {
+            max = Number(maxPrice);
+
+            if (!Number.isFinite(max) || max < 0) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message: "maxPrice must be a valid non-negative number"
+                });
+            }
+        }
+
+        if (min !== undefined && max !== undefined && min > max) {
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                message: "minPrice cannot be greater than maxPrice"
+            });
+        }
+
+        // ============================================
+        // VARIANT FILTERS
+        // ============================================
+
+        const variantConditions = {};
+
+        if (min !== undefined || max !== undefined) {
+            variantConditions.price = {};
+
+            if (min !== undefined) {
+                variantConditions.price.$gte = min;
+            }
+
+            if (max !== undefined) {
+                variantConditions.price.$lte = max;
+            }
+        }
+
+        if (size?.trim()) {
+            variantConditions.size = size.trim();
+        }
+
+        if (color?.trim()) {
+            variantConditions.color = {
+                $regex: `^${color.trim()}$`,
+                $options: "i"
+            };
+        }
+
+        if (Object.keys(variantConditions).length > 0) {
+            filter.variants = {
+                $elemMatch: variantConditions
+            };
+        }
+
+        // ============================================
+        // PAGINATION
+        // ============================================
+
+        const pageNum = Math.max(
+            parseInt(page, 10) || 1,
+            1
+        );
+
+        const limitNum = Math.min(
+            Math.max(parseInt(limit, 10) || 20, 1),
+            100
+        );
+
+        const skip = (pageNum - 1) * limitNum;
+
+        // ============================================
+        // SORTING
+        // ============================================
+
+        let sortOption = { createdAt: -1 };
+
+        switch (sort) {
+            case "oldest":
+                sortOption = { createdAt: 1 };
+                break;
+
+            case "price_asc":
+                sortOption = { "variants.0.price": 1 };
+                break;
+
+            case "price_desc":
+                sortOption = { "variants.0.price": -1 };
+                break;
+
+            case "rating":
+                sortOption = {
+                    averageReview: -1,
+                    createdAt: -1
+                };
+                break;
+
+            case "most_reviewed":
+                sortOption = {
+                    reviewCount: -1,
+                    createdAt: -1
+                };
+                break;
+
+            case "newest":
+            default:
+                sortOption = { createdAt: -1 };
+                break;
+        }
+
+        // ============================================
+        // FETCH PRODUCTS + COUNT
+        // ============================================
+
+        const [products, totalCount] = await Promise.all([
+            Product.find(filter)
+                .populate("category", "name description")
+                .populate("brand", "name description")
+                .sort(sortOption)
+                .skip(skip)
+                .limit(limitNum)
+                .lean(),
+
+            Product.countDocuments(filter)
+        ]);
+
+        // ============================================
+        // RESPONSE
+        // ============================================
 
         return res.status(StatusCodes.OK).json({
             success: true,
-            data: productsList
+            data: products,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                totalCount,
+                totalPages: Math.ceil(
+                    totalCount / limitNum
+                ),
+                hasNextPage:
+                    pageNum < Math.ceil(totalCount / limitNum),
+                hasPreviousPage:
+                    pageNum > 1
+            }
         });
 
     } catch (error) {
-        console.log(
-            "error in the get all products controller",
+        console.error(
+            "Error in get all products controller:",
             error.message
         );
 
-        return res.status(500).json({
-            message: "internal server error"
+        return res.status(
+            StatusCodes.INTERNAL_SERVER_ERROR
+        ).json({
+            message: "Internal server error"
         });
     }
 };
