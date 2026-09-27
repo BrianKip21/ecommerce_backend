@@ -152,3 +152,18 @@ export const login = async (req, res) => {
         });
     }
 };
+export const getMe = async (req, res) => {
+    return res.status(200).json({
+        _id: req.user._id,
+        fullName: req.user.fullName,
+        email: req.user.email
+    });
+};
+
+export const logout = async (req, res) => {
+    res.clearCookie("jwt");
+    return res.status(200).json({
+        success: true,
+        message: "Logged out successfully"
+    });
+};

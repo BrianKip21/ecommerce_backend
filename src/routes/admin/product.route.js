@@ -12,7 +12,7 @@ router.route('/')
     .post(authenticate, isAdmin, upload.single("image"),addProduct)
 router.route('/:id')
     .patch(authenticate, isAdmin, upload.single("image"), editProduct)
-    .delete(authenticate, isAdmin, upload.single("image"), deleteProduct)
+    .delete(authenticate, isAdmin, deleteProduct)
     .get(getProductById)
 
 export default router;

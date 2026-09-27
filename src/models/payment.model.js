@@ -2,12 +2,20 @@ import mongoose from "mongoose";
 
 const paymentSchema = new mongoose.Schema(
     {
+        // ============================================
+        // ORDER
+        // ============================================
+
         order: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Order",
             required: true,
             index: true
         },
+
+        // ============================================
+        // USER
+        // ============================================
 
         user: {
             type: mongoose.Schema.Types.ObjectId,
@@ -16,29 +24,74 @@ const paymentSchema = new mongoose.Schema(
             index: true
         },
 
-        // M-Pesa phone number
+        // ============================================
+        // M-PESA PHONE NUMBER
+        // ============================================
+
         phone: {
             type: String,
             required: true,
             trim: true
         },
 
-        // Final amount requested from M-Pesa
-        // This should always equal order.total
+        // ============================================
+        // PAYMENT AMOUNT
+        // ============================================
+
         amount: {
             type: Number,
             required: true,
             min: 0
         },
 
-        // Returned by Safaricom after STK Push
+        // ============================================
+        // PAYMENT ATTEMPT
+        // ============================================
+
+        /*
+         * Which attempt this payment represents.
+         *
+         * Example:
+         * Attempt 1
+         * Attempt 2
+         * Attempt 3
+         */
+
+        attemptNumber: {
+            type: Number,
+            required: true,
+            min: 1
+        },
+
+        // ============================================
+        // PAYMENT EXPIRATION
+        // ============================================
+
+        /*
+         * Every STK payment gets a 5-minute window.
+         *
+         * Example:
+         *
+         * createdAt  = 10:00
+         * expiresAt  = 10:05
+         */
+
+        expiresAt: {
+            type: Date,
+            required: true,
+            index: true
+        },
+
+        // ============================================
+        // SAFARICOM REQUEST IDs
+        // ============================================
+
         merchantRequestId: {
             type: String,
             required: true,
             trim: true
         },
 
-        // Returned by Safaricom after STK Push
         checkoutRequestId: {
             type: String,
             required: true,
@@ -47,35 +100,52 @@ const paymentSchema = new mongoose.Schema(
             trim: true
         },
 
-        // Returned in the M-Pesa callback after successful payment
+        // ============================================
+        // M-PESA RECEIPT
+        // ============================================
+
         mpesaReceiptNumber: {
             type: String,
             default: null,
             trim: true
         },
 
-        // M-Pesa result code
+        // ============================================
+        // M-PESA RESULT
+        // ============================================
+
         resultCode: {
             type: Number,
             default: null
         },
 
-        // M-Pesa result description
         resultDescription: {
             type: String,
             default: null,
             trim: true
         },
 
-        // Final payment state
+        // ============================================
+        // PAYMENT STATUS
+        // ============================================
+
         status: {
             type: String,
-            enum: ["pending", "success", "failed", "refunded"],
+            enum: [
+                "pending",
+                "success",
+                "failed",
+                "expired",
+                "refunded"
+            ],
             default: "pending",
             index: true
         },
 
-        // When M-Pesa confirms the transaction
+        // ============================================
+        // TRANSACTION DATE
+        // ============================================
+
         transactionDate: {
             type: Date,
             default: null
@@ -86,6 +156,37 @@ const paymentSchema = new mongoose.Schema(
     }
 );
 
-const Payment = mongoose.model("Payment", paymentSchema);
+
+// ============================================
+// INDEX FOR EXPIRING PAYMENTS
+// ============================================
+
+/*
+ * This index helps us find payments whose
+ * 5-minute window has expired.
+ *
+ * IMPORTANT:
+ * This does NOT automatically change the
+ * payment status to "expired".
+ *
+ * Our controller will handle that because
+ * expiration also needs to update the order
+ * and payment-attempt counters.
+ */
+
+paymentSchema.index({
+    status: 1,
+    expiresAt: 1
+});
+
+
+// ============================================
+// MODEL
+// ============================================
+
+const Payment = mongoose.model(
+    "Payment",
+    paymentSchema
+);
 
 export default Payment;

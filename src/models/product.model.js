@@ -21,6 +21,12 @@ const variantSchema = new mongoose.Schema(
             trim: true
         },
 
+        colorHex: {
+            type: String,
+            required: true,
+            trim: true
+        },
+
         price: {
             type: Number,
             required: true,

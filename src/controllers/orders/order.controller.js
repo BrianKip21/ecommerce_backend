@@ -4,10 +4,13 @@ import Order from "../../models/order.model.js";
 import Cart from "../../models/cart.model.js";
 import Product from "../../models/product.model.js";
 
-
 export const placeOrder = async (req, res) => {
     try {
         const { shippingAddress } = req.body;
+
+        // ----------------------------------------
+        // VALIDATE SHIPPING ADDRESS
+        // ----------------------------------------
 
         if (!shippingAddress) {
             return res.status(StatusCodes.BAD_REQUEST).json({
@@ -20,7 +23,8 @@ export const placeOrder = async (req, res) => {
             phone,
             address,
             city,
-            country
+            country,
+            postalCode
         } = shippingAddress;
 
         if (
@@ -40,7 +44,11 @@ export const placeOrder = async (req, res) => {
             phone: phone.trim(),
             address: address.trim(),
             city: city.trim(),
-            country: country.trim()
+            country: country.trim(),
+            postalCode:
+                typeof postalCode === "string"
+                    ? postalCode.trim()
+                    : undefined
         };
 
         if (
@@ -51,9 +59,15 @@ export const placeOrder = async (req, res) => {
             !sanitizedShippingAddress.country
         ) {
             return res.status(StatusCodes.BAD_REQUEST).json({
-                message: "Full name, phone, address, city and country are required"
+                message:
+                    "Full name, phone, address, city and country are required"
             });
         }
+
+
+        // ----------------------------------------
+        // FIND USER CART
+        // ----------------------------------------
 
         const cart = await Cart.findOne({
             user: req.user._id
@@ -68,21 +82,38 @@ export const placeOrder = async (req, res) => {
             });
         }
 
+
+        // ----------------------------------------
+        // START TRANSACTION
+        // ----------------------------------------
+
         const session = await mongoose.startSession();
 
         let createdOrder;
 
         try {
             await session.withTransaction(async () => {
+
                 const orderItems = [];
                 let subtotal = 0;
 
+
+                // ----------------------------------------
+                // PROCESS CART ITEMS
+                // ----------------------------------------
+
                 for (const item of cart.items) {
+
                     const product = item.product;
 
                     if (!product) {
                         throw new Error("PRODUCT_NOT_FOUND");
                     }
+
+
+                    // ----------------------------------------
+                    // FIND SELECTED VARIANT
+                    // ----------------------------------------
 
                     const variant = product.variants.id(
                         item.variantId
@@ -92,32 +123,48 @@ export const placeOrder = async (req, res) => {
                         throw new Error("VARIANT_NOT_FOUND");
                     }
 
+
+                    // ----------------------------------------
+                    // DETERMINE PRICE
+                    // ----------------------------------------
+
                     const price =
                         variant.salePrice ?? variant.price;
 
                     if (
                         price == null ||
-                        typeof price !== "number" ||
-                        price < 0
+                        !Number.isFinite(Number(price)) ||
+                        Number(price) < 0
                     ) {
                         throw new Error("INVALID_PRICE");
                     }
 
-                    /*
-                     * Atomically check and reduce stock.
-                     * If there isn't enough stock, matchedCount will be 0.
-                     */
+
+                    // ----------------------------------------
+                    // RESERVE STOCK
+                    //
+                    // Stock is reduced immediately when the
+                    // order is created.
+                    //
+                    // This prevents another customer from
+                    // purchasing the same stock while this
+                    // customer is completing payment.
+                    // ----------------------------------------
+
                     const result = await Product.updateOne(
                         {
                             _id: product._id,
+
                             "variants._id": variant._id,
+
                             "variants.stock": {
                                 $gte: item.quantity
                             }
                         },
                         {
                             $inc: {
-                                "variants.$.stock": -item.quantity
+                                "variants.$.stock":
+                                    -item.quantity
                             }
                         },
                         {
@@ -125,39 +172,96 @@ export const placeOrder = async (req, res) => {
                         }
                     );
 
+
+                    // ----------------------------------------
+                    // STOCK CHECK
+                    // ----------------------------------------
+
                     if (result.matchedCount === 0) {
                         throw new Error(
                             `OUT_OF_STOCK:${product.title}:${variant.color}:${variant.size}`
                         );
                     }
 
+
+                    // ----------------------------------------
+                    // CREATE ORDER ITEM
+                    // ----------------------------------------
+
                     orderItems.push({
                         product: product._id,
+
                         variantId: variant._id,
+
                         title: product.title,
+
                         image: product.image,
+
                         sku: variant.sku,
+
                         size: variant.size,
+
                         color: variant.color,
-                        price,
+
+                        price: Number(price),
+
                         quantity: item.quantity
                     });
 
-                    subtotal += price * item.quantity;
+
+                    // ----------------------------------------
+                    // CALCULATE SUBTOTAL
+                    // ----------------------------------------
+
+                    subtotal +=
+                        Number(price) * item.quantity;
                 }
+
+
+                // ----------------------------------------
+                // CREATE ORDER
+                // ----------------------------------------
 
                 const order = new Order({
                     user: req.user._id,
+
                     items: orderItems,
-                    shippingAddress: sanitizedShippingAddress,
+
+                    shippingAddress:
+                        sanitizedShippingAddress,
+
                     subtotal,
+
                     total: subtotal,
+
+                    // -------------------------------
+                    // PAYMENT STATE
+                    // -------------------------------
+
+                    paymentStatus: "pending",
+
+                    paymentAttempts: 0,
+
+                    paymentLockedUntil: null,
+
+                    paidAt: null,
+
+                    // -------------------------------
+                    // ORDER STATE
+                    // -------------------------------
+
                     status: "pending"
                 });
+
 
                 await order.save({
                     session
                 });
+
+
+                // ----------------------------------------
+                // CLEAR CART
+                // ----------------------------------------
 
                 cart.items = [];
 
@@ -165,22 +269,37 @@ export const placeOrder = async (req, res) => {
                     session
                 });
 
+
                 createdOrder = order;
             });
+
         } finally {
             await session.endSession();
         }
 
+
+        // ----------------------------------------
+        // RESPONSE
+        // ----------------------------------------
+
         return res.status(StatusCodes.CREATED).json({
             success: true,
+
             data: createdOrder
         });
 
+
     } catch (error) {
+
         console.error(
             "Error in place order controller:",
             error.message
         );
+
+
+        // ----------------------------------------
+        // PRODUCT NOT FOUND
+        // ----------------------------------------
 
         if (error.message === "PRODUCT_NOT_FOUND") {
             return res.status(StatusCodes.BAD_REQUEST).json({
@@ -189,12 +308,22 @@ export const placeOrder = async (req, res) => {
             });
         }
 
+
+        // ----------------------------------------
+        // VARIANT NOT FOUND
+        // ----------------------------------------
+
         if (error.message === "VARIANT_NOT_FOUND") {
             return res.status(StatusCodes.BAD_REQUEST).json({
                 message:
                     "One of the variants you selected is no longer available"
             });
         }
+
+
+        // ----------------------------------------
+        // INVALID PRICE
+        // ----------------------------------------
 
         if (error.message === "INVALID_PRICE") {
             return res.status(StatusCodes.BAD_REQUEST).json({
@@ -203,7 +332,13 @@ export const placeOrder = async (req, res) => {
             });
         }
 
+
+        // ----------------------------------------
+        // OUT OF STOCK
+        // ----------------------------------------
+
         if (error.message.startsWith("OUT_OF_STOCK:")) {
+
             const [, title, color, size] =
                 error.message.split(":");
 
@@ -213,6 +348,11 @@ export const placeOrder = async (req, res) => {
             });
         }
 
+
+        // ----------------------------------------
+        // INTERNAL SERVER ERROR
+        // ----------------------------------------
+
         return res.status(
             StatusCodes.INTERNAL_SERVER_ERROR
         ).json({
@@ -220,6 +360,7 @@ export const placeOrder = async (req, res) => {
         });
     }
 };
+
 
 
 export const getMyOrders = async (req, res) => {

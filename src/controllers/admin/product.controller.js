@@ -8,9 +8,9 @@ import Brand from "../../models/brand.model.js";
 import { generateUniqueSKU } from "../../lib/sku.js";
 
 import {
-    uploadToCloudinary,
-    deleteFromCloudinary
-} from "../../lib/cloudinary.js";
+    uploadToStorage,
+    deleteFromStorage
+} from "../../lib/storage.js";
 
 
 // ============================================================
@@ -79,7 +79,7 @@ export const addProduct = async (req, res) => {
 
         let parsedVariants = variants;
 
-        // Because multipart/form-data sends variants as a string
+        // multipart/form-data sends variants as a string
         if (typeof parsedVariants === "string") {
             try {
                 parsedVariants = JSON.parse(parsedVariants);
@@ -152,10 +152,15 @@ export const addProduct = async (req, res) => {
             const {
                 size,
                 color,
+                colorHex,
                 price,
                 salePrice,
                 stock
             } = variant;
+
+            // ----------------------------------------------------
+            // SIZE
+            // ----------------------------------------------------
 
             if (
                 typeof size !== "string" ||
@@ -166,6 +171,10 @@ export const addProduct = async (req, res) => {
                 });
             }
 
+            // ----------------------------------------------------
+            // COLOR
+            // ----------------------------------------------------
+
             if (
                 typeof color !== "string" ||
                 !color.trim()
@@ -174,6 +183,24 @@ export const addProduct = async (req, res) => {
                     message: "Variant color is required"
                 });
             }
+
+            // ----------------------------------------------------
+            // COLOR HEX
+            // ----------------------------------------------------
+
+            if (
+                typeof colorHex !== "string" ||
+                !/^#[0-9A-Fa-f]{6}$/.test(colorHex.trim())
+            ) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message:
+                        "Variant color must be a valid hex color"
+                });
+            }
+
+            // ----------------------------------------------------
+            // PRICE
+            // ----------------------------------------------------
 
             const numericPrice = Number(price);
 
@@ -186,6 +213,10 @@ export const addProduct = async (req, res) => {
                         "Variant price must be a positive number"
                 });
             }
+
+            // ----------------------------------------------------
+            // SALE PRICE
+            // ----------------------------------------------------
 
             let numericSalePrice = null;
 
@@ -214,6 +245,10 @@ export const addProduct = async (req, res) => {
                 }
             }
 
+            // ----------------------------------------------------
+            // STOCK
+            // ----------------------------------------------------
+
             const numericStock = Number(stock);
 
             if (
@@ -239,8 +274,10 @@ export const addProduct = async (req, res) => {
             const duplicateVariant =
                 processedVariants.find(
                     (item) =>
-                        item.size.toLowerCase() === normalizedSize &&
-                        item.color.toLowerCase() === normalizedColor
+                        item.size.toLowerCase() ===
+                        normalizedSize &&
+                        item.color.toLowerCase() ===
+                        normalizedColor
                 );
 
             if (duplicateVariant) {
@@ -260,6 +297,7 @@ export const addProduct = async (req, res) => {
                 sku,
                 size: size.trim(),
                 color: color.trim(),
+                colorHex: colorHex.trim().toUpperCase(),
                 price: numericPrice,
                 salePrice: numericSalePrice,
                 stock: numericStock
@@ -271,9 +309,9 @@ export const addProduct = async (req, res) => {
         // --------------------------------------------------------
 
         const uploadedImage =
-            await uploadToCloudinary(
+            await uploadToStorage(
                 imageFile.buffer,
-                "ecommerce/products"
+                imageFile.originalname
             );
 
         // --------------------------------------------------------
@@ -307,8 +345,14 @@ export const addProduct = async (req, res) => {
             await Product.findById(
                 newlyCreatedProduct._id
             )
-                .populate("category", "name description")
-                .populate("brand", "name description");
+                .populate(
+                    "category",
+                    "name description"
+                )
+                .populate(
+                    "brand",
+                    "name description"
+                );
 
         return res.status(StatusCodes.CREATED).json({
             success: true,
@@ -812,10 +856,15 @@ export const editProduct = async (req, res) => {
                     sku,
                     size,
                     color,
+                    colorHex,
                     price,
                     salePrice,
                     stock
                 } = variant;
+
+                // ------------------------------------------------
+                // SIZE
+                // ------------------------------------------------
 
                 if (
                     typeof size !== "string" ||
@@ -829,6 +878,10 @@ export const editProduct = async (req, res) => {
                     });
                 }
 
+                // ------------------------------------------------
+                // COLOR
+                // ------------------------------------------------
+
                 if (
                     typeof color !== "string" ||
                     !color.trim()
@@ -840,6 +893,28 @@ export const editProduct = async (req, res) => {
                             "Variant color is required"
                     });
                 }
+
+                // ------------------------------------------------
+                // COLOR HEX
+                // ------------------------------------------------
+
+                if (
+                    typeof colorHex !== "string" ||
+                    !/^#[0-9A-Fa-f]{6}$/.test(
+                        colorHex.trim()
+                    )
+                ) {
+                    return res.status(
+                        StatusCodes.BAD_REQUEST
+                    ).json({
+                        message:
+                            "Variant color must be a valid hex color"
+                    });
+                }
+
+                // ------------------------------------------------
+                // PRICE
+                // ------------------------------------------------
 
                 const numericPrice =
                     Number(price);
@@ -857,6 +932,10 @@ export const editProduct = async (req, res) => {
                             "Variant price must be a positive number"
                     });
                 }
+
+                // ------------------------------------------------
+                // SALE PRICE
+                // ------------------------------------------------
 
                 let numericSalePrice = null;
 
@@ -895,6 +974,10 @@ export const editProduct = async (req, res) => {
                     }
                 }
 
+                // ------------------------------------------------
+                // STOCK
+                // ------------------------------------------------
+
                 const numericStock =
                     Number(stock);
 
@@ -912,6 +995,10 @@ export const editProduct = async (req, res) => {
                     });
                 }
 
+                // ------------------------------------------------
+                // DUPLICATE SIZE + COLOR
+                // ------------------------------------------------
+
                 const normalizedSize =
                     size.trim().toLowerCase();
 
@@ -923,10 +1010,10 @@ export const editProduct = async (req, res) => {
                         (item) =>
                             item.size
                                 .toLowerCase() ===
-                                normalizedSize &&
+                            normalizedSize &&
                             item.color
                                 .toLowerCase() ===
-                                normalizedColor
+                            normalizedColor
                     );
 
                 if (duplicateVariant) {
@@ -938,9 +1025,10 @@ export const editProduct = async (req, res) => {
                     });
                 }
 
-                // Preserve an existing SKU.
-                // Generate one only when a new variant
-                // doesn't have an SKU.
+                // ------------------------------------------------
+                // SKU
+                // ------------------------------------------------
+
                 let finalSKU;
 
                 if (
@@ -948,6 +1036,42 @@ export const editProduct = async (req, res) => {
                     sku.trim()
                 ) {
                     finalSKU = sku.trim();
+
+                    // Check whether the SKU already belongs
+                    // to another product.
+                    const skuOwner =
+                        await Product.findOne({
+                            "variants.sku": finalSKU,
+                            _id: {
+                                $ne: id
+                            }
+                        });
+
+                    if (skuOwner) {
+                        return res.status(
+                            StatusCodes.CONFLICT
+                        ).json({
+                            message:
+                                `SKU ${finalSKU} already belongs to another product`
+                        });
+                    }
+
+                    // Also prevent duplicate SKU values
+                    // within this product update.
+                    const duplicateSKU =
+                        processedVariants.find(
+                            (item) =>
+                                item.sku === finalSKU
+                        );
+
+                    if (duplicateSKU) {
+                        return res.status(
+                            StatusCodes.BAD_REQUEST
+                        ).json({
+                            message:
+                                `SKU ${finalSKU} is duplicated`
+                        });
+                    }
                 } else {
                     finalSKU =
                         await generateUniqueSKU();
@@ -957,6 +1081,8 @@ export const editProduct = async (req, res) => {
                     sku: finalSKU,
                     size: size.trim(),
                     color: color.trim(),
+                    colorHex:
+                        colorHex.trim().toUpperCase(),
                     price: numericPrice,
                     salePrice:
                         numericSalePrice,
@@ -976,9 +1102,9 @@ export const editProduct = async (req, res) => {
 
         if (imageFile) {
             const uploadedImage =
-                await uploadToCloudinary(
+                await uploadToStorage(
                     imageFile.buffer,
-                    "ecommerce/products"
+                    imageFile.originalname
                 );
 
             updateFields.image =
@@ -1019,7 +1145,7 @@ export const editProduct = async (req, res) => {
 
         if (oldImagePublicId) {
             try {
-                await deleteFromCloudinary(
+                await deleteFromStorage(
                     oldImagePublicId
                 );
             } catch (cloudinaryError) {
@@ -1145,7 +1271,7 @@ export const deleteProduct = async (req, res) => {
 
         if (imagePublicId) {
             try {
-                await deleteFromCloudinary(
+                await deleteFromStorage(
                     imagePublicId
                 );
             } catch (cloudinaryError) {
