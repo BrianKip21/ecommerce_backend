@@ -591,7 +591,6 @@ export const mpesaCallback = async (
     try {
 
         const callback =
-            console.log("MPESA CALLBACK RECEIVED:", JSON.stringify(req.body));
             req.body?.Body?.stkCallback;
 
 
