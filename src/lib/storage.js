@@ -4,13 +4,15 @@ import crypto from "crypto";
 
 const BUCKET = "Products";
 
+
 // ============================================================
 // UPLOAD IMAGE
 // ============================================================
 
 export const uploadToStorage = async (
     buffer,
-    originalName
+    originalName,
+    folder = "products"
 ) => {
     if (!Buffer.isBuffer(buffer)) {
         throw new Error("A valid image buffer is required");
@@ -18,6 +20,19 @@ export const uploadToStorage = async (
 
     if (buffer.length === 0) {
         throw new Error("Empty image buffer provided");
+    }
+
+    // --------------------------------------------------------
+    // VALIDATE FOLDER
+    // --------------------------------------------------------
+
+    const allowedFolders = [
+        "products",
+        "collections"
+    ];
+
+    if (!allowedFolders.includes(folder)) {
+        throw new Error("Invalid storage folder");
     }
 
     // --------------------------------------------------------
@@ -59,31 +74,28 @@ export const uploadToStorage = async (
     );
 
     // --------------------------------------------------------
-    // GENERATE FILE NAME
+    // GENERATE UNIQUE FILE NAME
     // --------------------------------------------------------
 
-    const fileName =
-        `${crypto.randomUUID()}.webp`;
+    const fileName = `${crypto.randomUUID()}.webp`;
 
-    const filePath =
-        `products/${fileName}`;
+    const filePath = `${folder}/${fileName}`;
 
     // --------------------------------------------------------
     // UPLOAD TO SUPABASE
     // --------------------------------------------------------
 
-    const { error } =
-        await supabase.storage
-            .from(BUCKET)
-            .upload(
-                filePath,
-                optimizedBuffer,
-                {
-                    contentType: "image/webp",
-                    cacheControl: "31536000",
-                    upsert: false
-                }
-            );
+    const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(
+            filePath,
+            optimizedBuffer,
+            {
+                contentType: "image/webp",
+                cacheControl: "31536000",
+                upsert: false
+            }
+        );
 
     if (error) {
         console.error(
@@ -95,13 +107,12 @@ export const uploadToStorage = async (
     }
 
     // --------------------------------------------------------
-    // PUBLIC URL
+    // GET PUBLIC URL
     // --------------------------------------------------------
 
-    const { data } =
-        supabase.storage
-            .from(BUCKET)
-            .getPublicUrl(filePath);
+    const { data } = supabase.storage
+        .from(BUCKET)
+        .getPublicUrl(filePath);
 
     if (!data?.publicUrl) {
         throw new Error(

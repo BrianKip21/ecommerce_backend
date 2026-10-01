@@ -7,7 +7,7 @@ import cors from "cors";
 // ============================================================
 
 const allowedOrigins = [
-    "http://localhost:5174", // User frontend
+    "http://localhost:5173", // User frontend
     "http://localhost:5175", // Admin frontend
 
     // Production

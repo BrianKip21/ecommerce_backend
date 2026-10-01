@@ -12,12 +12,20 @@ import {
     deleteFromStorage
 } from "../../lib/storage.js";
 
+import {
+    buildProductFilter,
+    buildSortOption,
+    buildPagination
+} from "../../lib/productFilters.js";
+
 
 // ============================================================
 // ADD PRODUCT
 // ============================================================
 
 export const addProduct = async (req, res) => {
+    let uploadedImage = null;
+
     try {
         const {
             title,
@@ -61,13 +69,17 @@ export const addProduct = async (req, res) => {
             });
         }
 
-        if (!mongoose.Types.ObjectId.isValid(category)) {
+        if (
+            !mongoose.Types.ObjectId.isValid(category)
+        ) {
             return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "Invalid category id"
             });
         }
 
-        if (!mongoose.Types.ObjectId.isValid(brand)) {
+        if (
+            !mongoose.Types.ObjectId.isValid(brand)
+        ) {
             return res.status(StatusCodes.BAD_REQUEST).json({
                 message: "Invalid brand id"
             });
@@ -95,7 +107,8 @@ export const addProduct = async (req, res) => {
             parsedVariants.length === 0
         ) {
             return res.status(StatusCodes.BAD_REQUEST).json({
-                message: "At least one product variant is required"
+                message:
+                    "At least one product variant is required"
             });
         }
 
@@ -129,11 +142,12 @@ export const addProduct = async (req, res) => {
         // CHECK DUPLICATE PRODUCT
         // --------------------------------------------------------
 
-        const existingProduct = await Product.findOne({
-            title: title.trim(),
-            category,
-            brand
-        });
+        const existingProduct =
+            await Product.findOne({
+                title: title.trim(),
+                category,
+                brand
+            });
 
         if (existingProduct) {
             return res.status(StatusCodes.CONFLICT).json({
@@ -190,7 +204,9 @@ export const addProduct = async (req, res) => {
 
             if (
                 typeof colorHex !== "string" ||
-                !/^#[0-9A-Fa-f]{6}$/.test(colorHex.trim())
+                !/^#[0-9A-Fa-f]{6}$/.test(
+                    colorHex.trim()
+                )
             ) {
                 return res.status(StatusCodes.BAD_REQUEST).json({
                     message:
@@ -225,20 +241,29 @@ export const addProduct = async (req, res) => {
                 salePrice !== null &&
                 salePrice !== ""
             ) {
-                numericSalePrice = Number(salePrice);
+                numericSalePrice =
+                    Number(salePrice);
 
                 if (
-                    !Number.isFinite(numericSalePrice) ||
+                    !Number.isFinite(
+                        numericSalePrice
+                    ) ||
                     numericSalePrice < 0
                 ) {
-                    return res.status(StatusCodes.BAD_REQUEST).json({
+                    return res.status(
+                        StatusCodes.BAD_REQUEST
+                    ).json({
                         message:
                             "Sale price must be a non-negative number"
                     });
                 }
 
-                if (numericSalePrice >= numericPrice) {
-                    return res.status(StatusCodes.BAD_REQUEST).json({
+                if (
+                    numericSalePrice >= numericPrice
+                ) {
+                    return res.status(
+                        StatusCodes.BAD_REQUEST
+                    ).json({
                         message:
                             "Sale price must be less than regular price"
                     });
@@ -255,7 +280,9 @@ export const addProduct = async (req, res) => {
                 !Number.isFinite(numericStock) ||
                 numericStock < 0
             ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
+                return res.status(
+                    StatusCodes.BAD_REQUEST
+                ).json({
                     message:
                         "Stock cannot be negative or missing"
                 });
@@ -275,13 +302,15 @@ export const addProduct = async (req, res) => {
                 processedVariants.find(
                     (item) =>
                         item.size.toLowerCase() ===
-                        normalizedSize &&
+                            normalizedSize &&
                         item.color.toLowerCase() ===
-                        normalizedColor
+                            normalizedColor
                 );
 
             if (duplicateVariant) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
+                return res.status(
+                    StatusCodes.BAD_REQUEST
+                ).json({
                     message:
                         `Variant ${color} / ${size} already exists`
                 });
@@ -291,13 +320,15 @@ export const addProduct = async (req, res) => {
             // GENERATE UNIQUE SKU
             // ----------------------------------------------------
 
-            const sku = await generateUniqueSKU();
+            const sku =
+                await generateUniqueSKU();
 
             processedVariants.push({
                 sku,
                 size: size.trim(),
                 color: color.trim(),
-                colorHex: colorHex.trim().toUpperCase(),
+                colorHex:
+                    colorHex.trim().toUpperCase(),
                 price: numericPrice,
                 salePrice: numericSalePrice,
                 stock: numericStock
@@ -308,10 +339,11 @@ export const addProduct = async (req, res) => {
         // UPLOAD IMAGE
         // --------------------------------------------------------
 
-        const uploadedImage =
+        uploadedImage =
             await uploadToStorage(
                 imageFile.buffer,
-                imageFile.originalname
+                imageFile.originalname,
+                "products"
             );
 
         // --------------------------------------------------------
@@ -320,8 +352,11 @@ export const addProduct = async (req, res) => {
 
         const newlyCreatedProduct =
             new Product({
-                image: uploadedImage.secure_url,
-                imagePublicId: uploadedImage.public_id,
+                image:
+                    uploadedImage.secure_url,
+
+                imagePublicId:
+                    uploadedImage.public_id,
 
                 title: title.trim(),
                 description: description.trim(),
@@ -338,7 +373,7 @@ export const addProduct = async (req, res) => {
         await newlyCreatedProduct.save();
 
         // --------------------------------------------------------
-        // RESPONSE
+        // POPULATE PRODUCT
         // --------------------------------------------------------
 
         const populatedProduct =
@@ -354,13 +389,55 @@ export const addProduct = async (req, res) => {
                     "name description"
                 );
 
-        return res.status(StatusCodes.CREATED).json({
+        // --------------------------------------------------------
+        // RESPONSE
+        // --------------------------------------------------------
+
+        return res.status(
+            StatusCodes.CREATED
+        ).json({
             success: true,
-            message: "Product created successfully",
+            message:
+                "Product created successfully",
             data: populatedProduct
         });
 
     } catch (error) {
+
+        // --------------------------------------------------------
+        // CLEAN UP UPLOADED IMAGE
+        // --------------------------------------------------------
+
+        if (uploadedImage?.public_id) {
+            try {
+                await deleteFromStorage(
+                    uploadedImage.public_id
+                );
+            } catch (cleanupError) {
+                console.error(
+                    "Failed to clean up uploaded product image:",
+                    cleanupError.message
+                );
+            }
+        }
+
+        // --------------------------------------------------------
+        // DUPLICATE KEY
+        // --------------------------------------------------------
+
+        if (error.code === 11000) {
+            return res.status(
+                StatusCodes.CONFLICT
+            ).json({
+                message:
+                    "A product with the submitted data already exists"
+            });
+        }
+
+        // --------------------------------------------------------
+        // ERROR
+        // --------------------------------------------------------
+
         console.error(
             "Error in add product controller:",
             error
@@ -381,229 +458,41 @@ export const addProduct = async (req, res) => {
 
 export const getAllProducts = async (req, res) => {
     try {
-        const {
-            search,
-            category,
-            brand,
-            minPrice,
-            maxPrice,
-            size,
-            color,
-            sort,
-            page = 1,
-            limit = 20
-        } = req.query;
-
-        const filter = {};
-
         // --------------------------------------------------------
-        // SEARCH
+        // FILTER
         // --------------------------------------------------------
 
-        if (search?.trim()) {
-            const searchTerm = search.trim();
+        const filter =
+            buildProductFilter(
+                req.query,
+                res
+            );
 
-            filter.$or = [
-                {
-                    title: {
-                        $regex: searchTerm,
-                        $options: "i"
-                    }
-                },
-                {
-                    description: {
-                        $regex: searchTerm,
-                        $options: "i"
-                    }
-                }
-            ];
+        if (!filter) {
+            return;
         }
-
-        // --------------------------------------------------------
-        // CATEGORY
-        // --------------------------------------------------------
-
-        if (category) {
-            if (
-                !mongoose.Types.ObjectId.isValid(category)
-            ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
-                    message: "Invalid category id"
-                });
-            }
-
-            filter.category = category;
-        }
-
-        // --------------------------------------------------------
-        // BRAND
-        // --------------------------------------------------------
-
-        if (brand) {
-            if (
-                !mongoose.Types.ObjectId.isValid(brand)
-            ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
-                    message: "Invalid brand id"
-                });
-            }
-
-            filter.brand = brand;
-        }
-
-        // --------------------------------------------------------
-        // PRICE
-        // --------------------------------------------------------
-
-        let min;
-        let max;
-
-        if (minPrice !== undefined) {
-            min = Number(minPrice);
-
-            if (
-                !Number.isFinite(min) ||
-                min < 0
-            ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
-                    message:
-                        "minPrice must be a valid non-negative number"
-                });
-            }
-        }
-
-        if (maxPrice !== undefined) {
-            max = Number(maxPrice);
-
-            if (
-                !Number.isFinite(max) ||
-                max < 0
-            ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
-                    message:
-                        "maxPrice must be a valid non-negative number"
-                });
-            }
-        }
-
-        if (
-            min !== undefined &&
-            max !== undefined &&
-            min > max
-        ) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                message:
-                    "minPrice cannot be greater than maxPrice"
-            });
-        }
-
-        // --------------------------------------------------------
-        // VARIANT FILTERS
-        // --------------------------------------------------------
-
-        const variantConditions = {};
-
-        if (
-            min !== undefined ||
-            max !== undefined
-        ) {
-            variantConditions.price = {};
-
-            if (min !== undefined) {
-                variantConditions.price.$gte = min;
-            }
-
-            if (max !== undefined) {
-                variantConditions.price.$lte = max;
-            }
-        }
-
-        if (size?.trim()) {
-            variantConditions.size = size.trim();
-        }
-
-        if (color?.trim()) {
-            variantConditions.color = {
-                $regex: `^${color.trim()}$`,
-                $options: "i"
-            };
-        }
-
-        if (
-            Object.keys(variantConditions).length > 0
-        ) {
-            filter.variants = {
-                $elemMatch: variantConditions
-            };
-        }
-
-        // --------------------------------------------------------
-        // PAGINATION
-        // --------------------------------------------------------
-
-        const pageNum = Math.max(
-            parseInt(page, 10) || 1,
-            1
-        );
-
-        const limitNum = Math.min(
-            Math.max(
-                parseInt(limit, 10) || 20,
-                1
-            ),
-            100
-        );
-
-        const skip =
-            (pageNum - 1) * limitNum;
 
         // --------------------------------------------------------
         // SORTING
         // --------------------------------------------------------
 
-        let sortOption = {
-            createdAt: -1
-        };
+        const sortOption =
+            buildSortOption(
+                req.query.sort
+            );
 
-        switch (sort) {
-            case "oldest":
-                sortOption = {
-                    createdAt: 1
-                };
-                break;
+        // --------------------------------------------------------
+        // PAGINATION
+        // --------------------------------------------------------
 
-            case "price_asc":
-                sortOption = {
-                    "variants.0.price": 1
-                };
-                break;
-
-            case "price_desc":
-                sortOption = {
-                    "variants.0.price": -1
-                };
-                break;
-
-            case "rating":
-                sortOption = {
-                    averageReview: -1,
-                    createdAt: -1
-                };
-                break;
-
-            case "most_reviewed":
-                sortOption = {
-                    reviewCount: -1,
-                    createdAt: -1
-                };
-                break;
-
-            case "newest":
-            default:
-                sortOption = {
-                    createdAt: -1
-                };
-        }
+        const {
+            pageNum,
+            limitNum,
+            skip
+        } = buildPagination(
+            req.query.page,
+            req.query.limit
+        );
 
         // --------------------------------------------------------
         // QUERY
@@ -630,13 +519,24 @@ export const getAllProducts = async (req, res) => {
             Product.countDocuments(filter)
         ]);
 
+        // --------------------------------------------------------
+        // PAGINATION
+        // --------------------------------------------------------
+
         const totalPages =
             Math.ceil(
                 totalCount / limitNum
             );
 
-        return res.status(StatusCodes.OK).json({
+        // --------------------------------------------------------
+        // RESPONSE
+        // --------------------------------------------------------
+
+        return res.status(
+            StatusCodes.OK
+        ).json({
             success: true,
+
             data: products,
 
             pagination: {
@@ -644,14 +544,17 @@ export const getAllProducts = async (req, res) => {
                 limit: limitNum,
                 totalCount,
                 totalPages,
+
                 hasNextPage:
                     pageNum < totalPages,
+
                 hasPreviousPage:
                     pageNum > 1
             }
         });
 
     } catch (error) {
+
         console.error(
             "Error in get all products controller:",
             error
@@ -671,13 +574,21 @@ export const getAllProducts = async (req, res) => {
 // ============================================================
 
 export const editProduct = async (req, res) => {
+    let newUploadedImage = null;
+
     try {
         const { id } = req.params;
+
+        // --------------------------------------------------------
+        // VALIDATE ID
+        // --------------------------------------------------------
 
         if (
             !mongoose.Types.ObjectId.isValid(id)
         ) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
+            return res.status(
+                StatusCodes.BAD_REQUEST
+            ).json({
                 message: "Invalid product id"
             });
         }
@@ -700,7 +611,9 @@ export const editProduct = async (req, res) => {
             await Product.findById(id);
 
         if (!product) {
-            return res.status(StatusCodes.NOT_FOUND).json({
+            return res.status(
+                StatusCodes.NOT_FOUND
+            ).json({
                 message: "Product not found"
             });
         }
@@ -717,8 +630,11 @@ export const editProduct = async (req, res) => {
             brand === undefined &&
             variants === undefined
         ) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                message: "No fields provided for update"
+            return res.status(
+                StatusCodes.BAD_REQUEST
+            ).json({
+                message:
+                    "No fields provided for update"
             });
         }
 
@@ -733,7 +649,9 @@ export const editProduct = async (req, res) => {
                 typeof title !== "string" ||
                 !title.trim()
             ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
+                return res.status(
+                    StatusCodes.BAD_REQUEST
+                ).json({
                     message:
                         "Product title cannot be empty"
                 });
@@ -752,7 +670,9 @@ export const editProduct = async (req, res) => {
                 typeof description !== "string" ||
                 !description.trim()
             ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
+                return res.status(
+                    StatusCodes.BAD_REQUEST
+                ).json({
                     message:
                         "Product description cannot be empty"
                 });
@@ -772,17 +692,25 @@ export const editProduct = async (req, res) => {
                     category
                 )
             ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
-                    message: "Invalid category id"
+                return res.status(
+                    StatusCodes.BAD_REQUEST
+                ).json({
+                    message:
+                        "Invalid category id"
                 });
             }
 
             const existingCategory =
-                await Category.findById(category);
+                await Category.findById(
+                    category
+                );
 
             if (!existingCategory) {
-                return res.status(StatusCodes.NOT_FOUND).json({
-                    message: "Category not found"
+                return res.status(
+                    StatusCodes.NOT_FOUND
+                ).json({
+                    message:
+                        "Category not found"
                 });
             }
 
@@ -800,17 +728,25 @@ export const editProduct = async (req, res) => {
                     brand
                 )
             ) {
-                return res.status(StatusCodes.BAD_REQUEST).json({
-                    message: "Invalid brand id"
+                return res.status(
+                    StatusCodes.BAD_REQUEST
+                ).json({
+                    message:
+                        "Invalid brand id"
                 });
             }
 
             const existingBrand =
-                await Brand.findById(brand);
+                await Brand.findById(
+                    brand
+                );
 
             if (!existingBrand) {
-                return res.status(StatusCodes.NOT_FOUND).json({
-                    message: "Brand not found"
+                return res.status(
+                    StatusCodes.NOT_FOUND
+                ).json({
+                    message:
+                        "Brand not found"
                 });
             }
 
@@ -823,6 +759,7 @@ export const editProduct = async (req, res) => {
         // --------------------------------------------------------
 
         if (variants !== undefined) {
+
             if (typeof variants === "string") {
                 try {
                     variants =
@@ -1010,10 +947,10 @@ export const editProduct = async (req, res) => {
                         (item) =>
                             item.size
                                 .toLowerCase() ===
-                            normalizedSize &&
+                                normalizedSize &&
                             item.color
                                 .toLowerCase() ===
-                            normalizedColor
+                                normalizedColor
                     );
 
                 if (duplicateVariant) {
@@ -1035,13 +972,16 @@ export const editProduct = async (req, res) => {
                     typeof sku === "string" &&
                     sku.trim()
                 ) {
-                    finalSKU = sku.trim();
+                    finalSKU =
+                        sku.trim();
 
-                    // Check whether the SKU already belongs
-                    // to another product.
+                    // Check whether SKU belongs
+                    // to another product
                     const skuOwner =
                         await Product.findOne({
-                            "variants.sku": finalSKU,
+                            "variants.sku":
+                                finalSKU,
+
                             _id: {
                                 $ne: id
                             }
@@ -1056,12 +996,13 @@ export const editProduct = async (req, res) => {
                         });
                     }
 
-                    // Also prevent duplicate SKU values
-                    // within this product update.
+                    // Check duplicate SKU
+                    // within this update
                     const duplicateSKU =
                         processedVariants.find(
                             (item) =>
-                                item.sku === finalSKU
+                                item.sku ===
+                                finalSKU
                         );
 
                     if (duplicateSKU) {
@@ -1072,6 +1013,7 @@ export const editProduct = async (req, res) => {
                                 `SKU ${finalSKU} is duplicated`
                         });
                     }
+
                 } else {
                     finalSKU =
                         await generateUniqueSKU();
@@ -1082,7 +1024,9 @@ export const editProduct = async (req, res) => {
                     size: size.trim(),
                     color: color.trim(),
                     colorHex:
-                        colorHex.trim().toUpperCase(),
+                        colorHex
+                            .trim()
+                            .toUpperCase(),
                     price: numericPrice,
                     salePrice:
                         numericSalePrice,
@@ -1095,30 +1039,68 @@ export const editProduct = async (req, res) => {
         }
 
         // --------------------------------------------------------
+        // CHECK DUPLICATE PRODUCT
+        // --------------------------------------------------------
+
+        const finalTitle =
+            updateFields.title ??
+            product.title;
+
+        const finalCategory =
+            updateFields.category ??
+            product.category;
+
+        const finalBrand =
+            updateFields.brand ??
+            product.brand;
+
+        const duplicateProduct =
+            await Product.findOne({
+                title: finalTitle,
+                category: finalCategory,
+                brand: finalBrand,
+
+                _id: {
+                    $ne: id
+                }
+            });
+
+        if (duplicateProduct) {
+            return res.status(
+                StatusCodes.CONFLICT
+            ).json({
+                message:
+                    "A product with this name, category and brand already exists"
+            });
+        }
+
+        // --------------------------------------------------------
         // IMAGE
         // --------------------------------------------------------
 
         let oldImagePublicId = null;
 
         if (imageFile) {
-            const uploadedImage =
+
+            newUploadedImage =
                 await uploadToStorage(
                     imageFile.buffer,
-                    imageFile.originalname
+                    imageFile.originalname,
+                    "products"
                 );
 
             updateFields.image =
-                uploadedImage.secure_url;
+                newUploadedImage.secure_url;
 
             updateFields.imagePublicId =
-                uploadedImage.public_id;
+                newUploadedImage.public_id;
 
             oldImagePublicId =
                 product.imagePublicId;
         }
 
         // --------------------------------------------------------
-        // UPDATE
+        // UPDATE PRODUCT
         // --------------------------------------------------------
 
         const updatedProduct =
@@ -1143,20 +1125,29 @@ export const editProduct = async (req, res) => {
         // DELETE OLD IMAGE
         // --------------------------------------------------------
 
-        if (oldImagePublicId) {
+        if (
+            oldImagePublicId &&
+            newUploadedImage
+        ) {
             try {
                 await deleteFromStorage(
                     oldImagePublicId
                 );
-            } catch (cloudinaryError) {
+            } catch (storageError) {
                 console.error(
-                    "Failed to delete old Cloudinary image:",
-                    cloudinaryError.message
+                    "Failed to delete old product image:",
+                    storageError.message
                 );
             }
         }
 
-        return res.status(StatusCodes.OK).json({
+        // --------------------------------------------------------
+        // RESPONSE
+        // --------------------------------------------------------
+
+        return res.status(
+            StatusCodes.OK
+        ).json({
             success: true,
             message:
                 "Product updated successfully",
@@ -1164,6 +1155,41 @@ export const editProduct = async (req, res) => {
         });
 
     } catch (error) {
+
+        // --------------------------------------------------------
+        // CLEAN UP NEW IMAGE IF UPDATE FAILED
+        // --------------------------------------------------------
+
+        if (newUploadedImage?.public_id) {
+            try {
+                await deleteFromStorage(
+                    newUploadedImage.public_id
+                );
+            } catch (cleanupError) {
+                console.error(
+                    "Failed to clean up new product image:",
+                    cleanupError.message
+                );
+            }
+        }
+
+        // --------------------------------------------------------
+        // DUPLICATE KEY
+        // --------------------------------------------------------
+
+        if (error.code === 11000) {
+            return res.status(
+                StatusCodes.CONFLICT
+            ).json({
+                message:
+                    "A product with the submitted data already exists"
+            });
+        }
+
+        // --------------------------------------------------------
+        // ERROR
+        // --------------------------------------------------------
+
         console.error(
             "Error in edit product controller:",
             error
@@ -1186,13 +1212,24 @@ export const getProductById = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // --------------------------------------------------------
+        // VALIDATE ID
+        // --------------------------------------------------------
+
         if (
             !mongoose.Types.ObjectId.isValid(id)
         ) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                message: "Invalid product id"
+            return res.status(
+                StatusCodes.BAD_REQUEST
+            ).json({
+                message:
+                    "Invalid product id"
             });
         }
+
+        // --------------------------------------------------------
+        // FIND PRODUCT
+        // --------------------------------------------------------
 
         const product =
             await Product.findById(id)
@@ -1205,18 +1242,32 @@ export const getProductById = async (req, res) => {
                     "name description"
                 );
 
+        // --------------------------------------------------------
+        // NOT FOUND
+        // --------------------------------------------------------
+
         if (!product) {
-            return res.status(StatusCodes.NOT_FOUND).json({
-                message: "Product not found"
+            return res.status(
+                StatusCodes.NOT_FOUND
+            ).json({
+                message:
+                    "Product not found"
             });
         }
 
-        return res.status(StatusCodes.OK).json({
+        // --------------------------------------------------------
+        // RESPONSE
+        // --------------------------------------------------------
+
+        return res.status(
+            StatusCodes.OK
+        ).json({
             success: true,
             data: product
         });
 
     } catch (error) {
+
         console.error(
             "Error in get product by id controller:",
             error
@@ -1225,7 +1276,8 @@ export const getProductById = async (req, res) => {
         return res.status(
             StatusCodes.INTERNAL_SERVER_ERROR
         ).json({
-            message: "Internal server error"
+            message:
+                "Internal server error"
         });
     }
 };
@@ -1239,20 +1291,34 @@ export const deleteProduct = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // --------------------------------------------------------
+        // VALIDATE ID
+        // --------------------------------------------------------
+
         if (
             !mongoose.Types.ObjectId.isValid(id)
         ) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                message: "Invalid product id"
+            return res.status(
+                StatusCodes.BAD_REQUEST
+            ).json({
+                message:
+                    "Invalid product id"
             });
         }
+
+        // --------------------------------------------------------
+        // FIND PRODUCT
+        // --------------------------------------------------------
 
         const product =
             await Product.findById(id);
 
         if (!product) {
-            return res.status(StatusCodes.NOT_FOUND).json({
-                message: "Product not found"
+            return res.status(
+                StatusCodes.NOT_FOUND
+            ).json({
+                message:
+                    "Product not found"
             });
         }
 
@@ -1260,13 +1326,13 @@ export const deleteProduct = async (req, res) => {
             product.imagePublicId;
 
         // --------------------------------------------------------
-        // DELETE PRODUCT FROM DATABASE
+        // DELETE PRODUCT
         // --------------------------------------------------------
 
         await product.deleteOne();
 
         // --------------------------------------------------------
-        // DELETE IMAGE FROM CLOUDINARY
+        // DELETE IMAGE FROM STORAGE
         // --------------------------------------------------------
 
         if (imagePublicId) {
@@ -1274,21 +1340,28 @@ export const deleteProduct = async (req, res) => {
                 await deleteFromStorage(
                     imagePublicId
                 );
-            } catch (cloudinaryError) {
+            } catch (storageError) {
                 console.error(
-                    "Failed to delete product image from Cloudinary:",
-                    cloudinaryError.message
+                    "Failed to delete product image from storage:",
+                    storageError.message
                 );
             }
         }
 
-        return res.status(StatusCodes.OK).json({
+        // --------------------------------------------------------
+        // RESPONSE
+        // --------------------------------------------------------
+
+        return res.status(
+            StatusCodes.OK
+        ).json({
             success: true,
             message:
                 "Product deleted successfully"
         });
 
     } catch (error) {
+
         console.error(
             "Error in delete product controller:",
             error
@@ -1297,7 +1370,8 @@ export const deleteProduct = async (req, res) => {
         return res.status(
             StatusCodes.INTERNAL_SERVER_ERROR
         ).json({
-            message: "Internal server error"
+            message:
+                "Internal server error"
         });
     }
 };
