@@ -13,6 +13,7 @@ import {
     updateCollection,
     deleteCollection,
     getAllCollectionsAdmin,
+    getCollectionByIdAdmin,
     getCollections,
     getCollectionBySlug
 } from "../../controllers/admin/collection.controller.js";
@@ -29,6 +30,13 @@ router.get(
     authenticate,
     isAdmin,
     getAllCollectionsAdmin
+);
+
+router.get(
+    "/admin/:id",
+    authenticate,
+    isAdmin,
+    getCollectionByIdAdmin
 );
 
 router.post(

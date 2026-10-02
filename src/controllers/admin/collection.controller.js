@@ -701,6 +701,47 @@ export const getAllCollectionsAdmin = async (
     }
 };
 
+export const getCollectionByIdAdmin = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(StatusCodes.BAD_REQUEST).json({
+                success: false,
+                message: "Invalid collection id"
+            });
+        }
+
+        const collection = await Collection.findById(id)
+            .populate({
+                path: "products",
+                select: "_id title image"
+            })
+            .lean();
+
+        if (!collection) {
+            return res.status(StatusCodes.NOT_FOUND).json({
+                success: false,
+                message: "Collection not found"
+            });
+        }
+
+        return res.status(StatusCodes.OK).json({
+            success: true,
+            data: collection
+        });
+    } catch (error) {
+        console.error(
+            "Get collection by id error:",
+            error
+        );
+
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: "Failed to fetch collection"
+        });
+    }
+};
 
 // --------------------------------------------------
 // PUBLIC — GET ACTIVE COLLECTIONS

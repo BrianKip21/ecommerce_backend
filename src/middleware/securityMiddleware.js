@@ -8,7 +8,8 @@ import cors from "cors";
 
 const allowedOrigins = [
     "http://localhost:5173", // User frontend
-    "http://localhost:5175", // Admin frontend
+    "http://localhost:5174",
+    "http://localhost:5175", 
 
     // Production
     process.env.USER_FRONTEND_URL,
