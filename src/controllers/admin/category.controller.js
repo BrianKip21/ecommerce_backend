@@ -2,33 +2,70 @@ import Category from "../../models/category.model.js";
 import mongoose from "mongoose";
 import { StatusCodes } from "http-status-codes";
 import Product from "../../models/product.model.js";
+import { uploadToStorage, deleteFromStorage } from "../../lib/storage.js";
 
 export const addCategory = async (req, res) => {
     try {
-        const { name, description } = req.body
+        const { name, description } = req.body;
+
         if (!name?.trim()) {
-            return res.status(400).json({ message: "Category name is required" })
+            return res.status(400).json({
+                message: "Category name is required"
+            });
         }
 
         const categoryName = name.trim();
 
-        const existingCategory = await Category.findOne({ name: categoryName })
+        const existingCategory = await Category.findOne({
+            name: categoryName
+        });
+
         if (existingCategory) {
-            return res.status(400).json({ message: "category already exists" })
+            return res.status(400).json({
+                message: "Category already exists"
+            });
         }
+
+        let image = "";
+        let imagePublicId = "";
+
+        // Upload category image if provided
+        if (req.file) {
+            const uploadedImage = await uploadToStorage(
+                req.file.buffer,
+                req.file.originalname,
+                "categories"
+            );
+
+            image = uploadedImage.secure_url;
+            imagePublicId = uploadedImage.public_id;
+        }
+
         const newCategory = new Category({
             name: categoryName,
-            description
-        })
+            description,
+            image,
+            imagePublicId
+        });
 
-        await newCategory.save()
+        await newCategory.save();
 
-        return res.status(201).json({ success: true, data: newCategory })
+        return res.status(201).json({
+            success: true,
+            data: newCategory
+        });
+
     } catch (error) {
-        console.log("error in the add category controller", error.message);
-        res.status(500).json({ message: "internal server error" });
+        console.log(
+            "error in the add category controller",
+            error.message
+        );
+
+        res.status(500).json({
+            message: "internal server error"
+        });
     }
-}
+};
 
 export const getAllCategories = async (req, res) => {
     try {
@@ -68,13 +105,24 @@ export const getCategoryById = async (req, res) => {
 
 export const editCategory = async (req, res) => {
     try {
-        const { id } = req.params
-        const { name, description } = req.body
+        const { id } = req.params;
+        const { name, description } = req.body;
 
-        if (Object.keys(req.body).length === 0) {
+        if (
+            Object.keys(req.body).length === 0 &&
+            !req.file
+        ) {
             return res.status(400).json({
                 message: "No fields provided for update"
-            })
+            });
+        }
+
+        const category = await Category.findById(id);
+
+        if (!category) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
         }
 
         const updateFields = {};
@@ -85,36 +133,75 @@ export const editCategory = async (req, res) => {
             if (!categoryName) {
                 return res.status(400).json({
                     message: "Category name cannot be empty"
-                })
+                });
             }
 
             const existingCategory = await Category.findOne({
                 name: categoryName,
-                _id: { $ne: id}
-            })
+                _id: { $ne: id }
+            });
 
             if (existingCategory) {
                 return res.status(400).json({
                     message: "Category already exists"
                 });
             }
+
             updateFields.name = categoryName;
         }
-        if (description !== undefined) updateFields.description = description
 
-        const updateCategory = await Category.findByIdAndUpdate(
-            id,
-            updateFields,
-            { new: true, runValidators: true })
-        if (!updateCategory) {
-            return res.status(404).json({ message: "category not found" })
+        if (description !== undefined) {
+            updateFields.description = description;
         }
-        res.status(200).json({ data: updateCategory })
+
+        // ------------------------------------------------
+        // NEW IMAGE
+        // ------------------------------------------------
+
+        if (req.file) {
+            const uploadedImage = await uploadToStorage(
+                req.file.buffer,
+                req.file.originalname,
+                "categories"
+            );
+
+            updateFields.image = uploadedImage.secure_url;
+            updateFields.imagePublicId =
+                uploadedImage.public_id;
+
+            // Delete old image after successful upload
+            if (category.imagePublicId) {
+                await deleteFromStorage(
+                    category.imagePublicId
+                );
+            }
+        }
+
+        const updatedCategory =
+            await Category.findByIdAndUpdate(
+                id,
+                updateFields,
+                {
+                    new: true,
+                    runValidators: true
+                }
+            );
+
+        return res.status(200).json({
+            data: updatedCategory
+        });
+
     } catch (error) {
-        console.log("error in the edit category controller", error.message);
-        res.status(500).json({ message: "internal server error" });
+        console.log(
+            "error in the edit category controller",
+            error.message
+        );
+
+        res.status(500).json({
+            message: "internal server error"
+        });
     }
-}
+};
 
 export const deleteCategory = async (req, res) => {
     try {
@@ -138,13 +225,22 @@ export const deleteCategory = async (req, res) => {
             });
         }
 
-        const category = await Category.findByIdAndDelete(id);
+        const category = await Category.findById(id);
 
         if (!category) {
             return res.status(StatusCodes.NOT_FOUND).json({
                 message: "Category not found"
             });
         }
+
+        // Delete category image from storage
+        if (category.imagePublicId) {
+            await deleteFromStorage(
+                category.imagePublicId
+            );
+        }
+
+        await Category.findByIdAndDelete(id);
 
         return res.status(StatusCodes.OK).json({
             success: true,
@@ -157,7 +253,9 @@ export const deleteCategory = async (req, res) => {
             error.message
         );
 
-        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        return res.status(
+            StatusCodes.INTERNAL_SERVER_ERROR
+        ).json({
             message: "Internal server error"
         });
     }

@@ -28,7 +28,8 @@ export const uploadToStorage = async (
 
     const allowedFolders = [
         "products",
-        "collections"
+        "collections",
+        "categories"
     ];
 
     if (!allowedFolders.includes(folder)) {

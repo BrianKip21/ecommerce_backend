@@ -11,8 +11,16 @@ const CategorySchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    image: {
+        type: String,
+        default: ""
+    },
+    imagePublicId: {
+        type: String,
+        default: ""
+    }
 
-}, {timestamps: true})
+}, { timestamps: true })
 
 const Category = mongoose.model("Category", CategorySchema)
 export default Category
