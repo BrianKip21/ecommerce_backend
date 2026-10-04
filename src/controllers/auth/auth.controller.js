@@ -1,7 +1,17 @@
 import User from "../../models/user.model.js";
 import { generateToken } from "../../lib/utils.js";
 import bcrypt from "bcryptjs";
+import { OAuth2Client } from "google-auth-library";
 import { mergeGuestCartIntoUser } from "../../services/cart.service.js";
+
+const googleClient = new OAuth2Client(
+    process.env.GOOGLE_CLIENT_ID
+);
+
+
+// =========================
+// SIGNUP
+// =========================
 
 export const signup = async (req, res) => {
     const { fullName, email, password } = req.body;
@@ -43,7 +53,11 @@ export const signup = async (req, res) => {
         }
 
         const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const hashedPassword = await bcrypt.hash(
+            password,
+            salt
+        );
 
         const newUser = new User({
             fullName: normalizedFullName,
@@ -86,6 +100,10 @@ export const signup = async (req, res) => {
 };
 
 
+// =========================
+// LOGIN
+// =========================
+
 export const login = async (req, res) => {
     const { email, password } = req.body;
 
@@ -108,6 +126,14 @@ export const login = async (req, res) => {
         if (!user) {
             return res.status(400).json({
                 message: "Invalid credentials"
+            });
+        }
+
+        // Google-only account
+        if (!user.password) {
+            return res.status(400).json({
+                message:
+                    "This account uses Google login. Please continue with Google."
             });
         }
 
@@ -152,6 +178,113 @@ export const login = async (req, res) => {
         });
     }
 };
+
+
+// =========================
+// GOOGLE AUTHENTICATION
+// =========================
+
+export const googleAuth = async (req, res) => {
+    try {
+        const { credential } = req.body;
+
+        if (!credential) {
+            return res.status(400).json({
+                message: "Google credential is required"
+            });
+        }
+
+        // Verify Google's ID token
+        const ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: process.env.GOOGLE_CLIENT_ID
+        });
+
+        const payload = ticket.getPayload();
+
+        const {
+            sub: googleId,
+            email,
+            name
+        } = payload;
+
+        if (!googleId || !email) {
+            return res.status(400).json({
+                message: "Invalid Google account information"
+            });
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        // Find existing user by Google ID OR email
+        let user = await User.findOne({
+            $or: [
+                { googleId },
+                { email: normalizedEmail }
+            ]
+        });
+
+        if (user) {
+
+            // Existing local account:
+            // Link the Google account to it.
+            if (!user.googleId) {
+                user.googleId = googleId;
+                await user.save();
+            }
+
+        } else {
+
+            // Create a new Google user
+            user = new User({
+                fullName: name || "Google User",
+                email: normalizedEmail,
+                googleId,
+                role: "user"
+            });
+
+            await user.save();
+        }
+
+        // Generate your application's JWT
+        generateToken(user._id, res);
+
+        // Merge guest cart into authenticated user's cart
+        await mergeGuestCartIntoUser(
+            req.cookies?.guestId,
+            user._id
+        );
+
+        // Remove guest cart cookie
+        res.clearCookie("guestId", {
+            httpOnly: true,
+            sameSite: "strict",
+            secure: process.env.NODE_ENV === "production"
+        });
+
+        return res.status(200).json({
+            _id: user._id,
+            fullName: user.fullName,
+            email: user.email
+        });
+
+    } catch (error) {
+        console.error(
+            "Error in Google authentication:",
+            error.message
+        );
+
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+};
+
+
+// =========================
+// GET CURRENT USER
+// =========================
+
 export const getMe = async (req, res) => {
     return res.status(200).json({
         _id: req.user._id,
@@ -160,8 +293,14 @@ export const getMe = async (req, res) => {
     });
 };
 
+
+// =========================
+// LOGOUT
+// =========================
+
 export const logout = async (req, res) => {
     res.clearCookie("jwt");
+
     return res.status(200).json({
         success: true,
         message: "Logged out successfully"

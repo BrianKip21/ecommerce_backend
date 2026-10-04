@@ -18,16 +18,24 @@ const UserSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: [true, 'please provide password'],
+        required: function () {
+            return !this.googleId;
+        },
         minlength: 6,
+    },
+    googleId: {
+        type: String,
+        default: null,
+        unique: true,
+        sparse: true // allows many documents with googleId: null without violating uniqueness
     },
     role: {
         type: String,
-        enum: [ "user","admin"],
+        enum: ["user", "admin"],
         default: "user"
     }
 },
- {timestamps: true}
+    { timestamps: true }
 )
 
 const User = mongoose.model("User", UserSchema)
