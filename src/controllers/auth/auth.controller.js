@@ -1,7 +1,9 @@
 import User from "../../models/user.model.js";
 import { generateToken } from "../../lib/utils.js";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
+import { sendPasswordResetEmail } from "../../lib/email.js";
 import { mergeGuestCartIntoUser } from "../../services/cart.service.js";
 
 const googleClient = new OAuth2Client(
@@ -271,6 +273,143 @@ export const googleAuth = async (req, res) => {
     } catch (error) {
         console.error(
             "Error in Google authentication:",
+            error.message
+        );
+
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+};
+
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (typeof email !== "string" || !email.trim()) {
+            return res.status(400).json({
+                message: "Email is required"
+            });
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+        const user = await User.findOne({
+            email: normalizedEmail
+        });
+
+        // Always return the same response whether or not
+        // the email exists to prevent account enumeration.
+        if (!user) {
+            return res.status(200).json({
+                success: true,
+                message:
+                    "If that email is registered, a reset link has been sent."
+            });
+        }
+
+        // Generate a secure random token.
+        const rawToken = crypto
+            .randomBytes(32)
+            .toString("hex");
+
+        // Store only the hashed version in the database.
+        const hashedToken = crypto
+            .createHash("sha256")
+            .update(rawToken)
+            .digest("hex");
+
+        user.resetPasswordToken = hashedToken;
+
+        user.resetPasswordExpires =
+            Date.now() + 60 * 60 * 1000; // 1 hour
+
+        await user.save();
+
+        // Only the raw token is sent to the user.
+        const resetUrl =
+            `${process.env.FRONTEND_URL}/reset-password/${rawToken}`;
+
+        await sendPasswordResetEmail(
+            user.email,
+            resetUrl
+        );
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "If that email is registered, a reset link has been sent."
+        });
+
+    } catch (error) {
+        console.error(
+            "Error in forgot password controller:",
+            error.message
+        );
+
+        return res.status(500).json({
+            message: "Internal server error"
+        });
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { password } = req.body;
+
+        if (
+            typeof password !== "string" ||
+            password.length < 6
+        ) {
+            return res.status(400).json({
+                message: "Password must be at least 6 characters"
+            });
+        }
+
+        // Hash the token received from the reset URL.
+        const hashedToken = crypto
+            .createHash("sha256")
+            .update(token)
+            .digest("hex");
+
+        // Find a user whose token exists and has not expired.
+        const user = await User.findOne({
+            resetPasswordToken: hashedToken,
+            resetPasswordExpires: {
+                $gt: Date.now()
+            }
+        });
+
+        if (!user) {
+            return res.status(400).json({
+                message:
+                    "Reset link is invalid or has expired"
+            });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+
+        user.password = await bcrypt.hash(
+            password,
+            salt
+        );
+
+        // Invalidate the reset token immediately.
+        user.resetPasswordToken = null;
+        user.resetPasswordExpires = null;
+
+        await user.save();
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Password reset successfully. You can now log in."
+        });
+
+    } catch (error) {
+        console.error(
+            "Error in reset password controller:",
             error.message
         );
 
