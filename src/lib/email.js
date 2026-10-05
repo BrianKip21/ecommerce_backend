@@ -5,6 +5,8 @@ const transporter = nodemailer.createTransport({
     port: Number(process.env.SMTP_PORT),
     secure: Number(process.env.SMTP_PORT) === 465,
 
+    family: 4,
+
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
@@ -28,12 +30,7 @@ export const sendPasswordResetEmail = async (toEmail, resetUrl) => {
                     line-height: 1.6;
                 "
             >
-                <h2
-                    style="
-                        margin-bottom: 24px;
-                        color: #111;
-                    "
-                >
+                <h2 style="margin-bottom: 24px; color: #111;">
                     Reset your password
                 </h2>
 
@@ -81,12 +78,7 @@ export const sendPasswordResetEmail = async (toEmail, resetUrl) => {
                     "
                 />
 
-                <p
-                    style="
-                        font-size: 13px;
-                        color: #777;
-                    "
-                >
+                <p style="font-size: 13px; color: #777;">
                     Liaan Collections
                 </p>
             </div>
