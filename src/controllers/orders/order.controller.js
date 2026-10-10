@@ -3,64 +3,182 @@ import { StatusCodes } from "http-status-codes";
 import Order from "../../models/order.model.js";
 import Cart from "../../models/cart.model.js";
 import Product from "../../models/product.model.js";
+import User from "../../models/user.model.js"
 
 export const placeOrder = async (req, res) => {
     try {
-        const { shippingAddress } = req.body;
-
-        // ----------------------------------------
-        // VALIDATE SHIPPING ADDRESS
-        // ----------------------------------------
-
-        if (!shippingAddress) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                message: "Shipping address is required"
-            });
-        }
-
         const {
-            fullName,
-            phone,
-            address,
-            city,
-            country,
-            postalCode
-        } = shippingAddress;
+            addressId,
+            shippingAddress,
+            saveAddress = false
+        } = req.body;
 
-        if (
-            typeof fullName !== "string" ||
-            typeof phone !== "string" ||
-            typeof address !== "string" ||
-            typeof city !== "string" ||
-            typeof country !== "string"
-        ) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                message: "Invalid shipping address"
+        // ----------------------------------------
+        // FIND AUTHENTICATED USER
+        // ----------------------------------------
+
+        const user = await User.findById(req.user._id);
+
+        if (!user) {
+            return res.status(StatusCodes.UNAUTHORIZED).json({
+                message: "User not found"
             });
         }
 
-        const sanitizedShippingAddress = {
-            fullName: fullName.trim(),
-            phone: phone.trim(),
-            address: address.trim(),
-            city: city.trim(),
-            country: country.trim(),
-            postalCode:
-                typeof postalCode === "string"
-                    ? postalCode.trim()
-                    : undefined
-        };
 
-        if (
-            !sanitizedShippingAddress.fullName ||
-            !sanitizedShippingAddress.phone ||
-            !sanitizedShippingAddress.address ||
-            !sanitizedShippingAddress.city ||
-            !sanitizedShippingAddress.country
-        ) {
+        // ----------------------------------------
+        // RESOLVE SHIPPING ADDRESS
+        // ----------------------------------------
+
+        let sanitizedShippingAddress;
+
+
+        // ========================================
+        // OPTION 1: USE SAVED ADDRESS
+        // ========================================
+
+        if (addressId) {
+
+            // Validate MongoDB ObjectId
+            if (!mongoose.Types.ObjectId.isValid(addressId)) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message: "Invalid address id"
+                });
+            }
+
+            const savedAddress = user.addresses.id(addressId);
+
+            if (!savedAddress) {
+                return res.status(StatusCodes.NOT_FOUND).json({
+                    message: "Shipping address not found"
+                });
+            }
+
+            sanitizedShippingAddress = {
+                fullName: savedAddress.fullName.trim(),
+                phone: savedAddress.phone.trim(),
+                address: savedAddress.address.trim(),
+                city: savedAddress.city.trim(),
+                country: savedAddress.country.trim()
+            };
+
+            // Include postal code if your address schema/order schema supports it
+            if (savedAddress.postalCode) {
+                sanitizedShippingAddress.postalCode =
+                    savedAddress.postalCode.trim();
+            }
+        }
+
+
+        // ========================================
+        // OPTION 2: USE NEW/CUSTOM ADDRESS
+        // ========================================
+
+        else if (shippingAddress) {
+
+            const {
+                fullName,
+                phone,
+                address,
+                city,
+                country,
+                postalCode
+            } = shippingAddress;
+
+
+            // ----------------------------------------
+            // VALIDATE TYPES
+            // ----------------------------------------
+
+            if (
+                typeof fullName !== "string" ||
+                typeof phone !== "string" ||
+                typeof address !== "string" ||
+                typeof city !== "string" ||
+                typeof country !== "string"
+            ) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message: "Invalid shipping address"
+                });
+            }
+
+
+            // ----------------------------------------
+            // SANITIZE ADDRESS
+            // ----------------------------------------
+
+            sanitizedShippingAddress = {
+                fullName: fullName.trim(),
+                phone: phone.trim(),
+                address: address.trim(),
+                city: city.trim(),
+                country: country.trim(),
+                postalCode:
+                    typeof postalCode === "string"
+                        ? postalCode.trim()
+                        : undefined
+            };
+
+
+            // ----------------------------------------
+            // REQUIRED FIELD VALIDATION
+            // ----------------------------------------
+
+            if (
+                !sanitizedShippingAddress.fullName ||
+                !sanitizedShippingAddress.phone ||
+                !sanitizedShippingAddress.address ||
+                !sanitizedShippingAddress.city ||
+                !sanitizedShippingAddress.country
+            ) {
+                return res.status(StatusCodes.BAD_REQUEST).json({
+                    message:
+                        "Full name, phone, address, city and country are required"
+                });
+            }
+
+
+            // ----------------------------------------
+            // OPTIONALLY SAVE NEW ADDRESS
+            // ----------------------------------------
+
+            // ----------------------------------------
+            // OPTIONALLY SAVE NEW ADDRESS
+            // ----------------------------------------
+
+            if (saveAddress === true) {
+
+                const shouldBeDefault =
+                    user.addresses.length === 0;
+
+                user.addresses.push({
+                    label: "Home",
+                    fullName:
+                        sanitizedShippingAddress.fullName,
+                    phone:
+                        sanitizedShippingAddress.phone,
+                    address:
+                        sanitizedShippingAddress.address,
+                    city:
+                        sanitizedShippingAddress.city,
+                    country:
+                        sanitizedShippingAddress.country,
+                    isDefault: shouldBeDefault
+                });
+
+                await user.save();
+            }
+        }
+
+
+        // ========================================
+        // NO ADDRESS PROVIDED
+        // ========================================
+
+        else {
             return res.status(StatusCodes.BAD_REQUEST).json({
                 message:
-                    "Full name, phone, address, city and country are required"
+                    "Please select a saved address or provide a shipping address"
             });
         }
 
@@ -92,6 +210,7 @@ export const placeOrder = async (req, res) => {
         let createdOrder;
 
         try {
+
             await session.withTransaction(async () => {
 
                 const orderItems = [];
@@ -142,21 +261,12 @@ export const placeOrder = async (req, res) => {
 
                     // ----------------------------------------
                     // RESERVE STOCK
-                    //
-                    // Stock is reduced immediately when the
-                    // order is created.
-                    //
-                    // This prevents another customer from
-                    // purchasing the same stock while this
-                    // customer is completing payment.
                     // ----------------------------------------
 
                     const result = await Product.updateOne(
                         {
                             _id: product._id,
-
                             "variants._id": variant._id,
-
                             "variants.stock": {
                                 $gte: item.quantity
                             }
@@ -227,6 +337,9 @@ export const placeOrder = async (req, res) => {
 
                     items: orderItems,
 
+                    // IMPORTANT:
+                    // This is a snapshot of the address
+                    // at the time the order was created.
                     shippingAddress:
                         sanitizedShippingAddress,
 
@@ -234,9 +347,9 @@ export const placeOrder = async (req, res) => {
 
                     total: subtotal,
 
-                    // -------------------------------
+                    // ----------------------------------------
                     // PAYMENT STATE
-                    // -------------------------------
+                    // ----------------------------------------
 
                     paymentStatus: "pending",
 
@@ -246,9 +359,9 @@ export const placeOrder = async (req, res) => {
 
                     paidAt: null,
 
-                    // -------------------------------
+                    // ----------------------------------------
                     // ORDER STATE
-                    // -------------------------------
+                    // ----------------------------------------
 
                     status: "pending"
                 });
@@ -284,7 +397,6 @@ export const placeOrder = async (req, res) => {
 
         return res.status(StatusCodes.CREATED).json({
             success: true,
-
             data: createdOrder
         });
 
@@ -360,7 +472,6 @@ export const placeOrder = async (req, res) => {
         });
     }
 };
-
 
 
 export const getMyOrders = async (req, res) => {

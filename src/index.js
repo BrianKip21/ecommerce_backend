@@ -24,6 +24,7 @@ import orderRoutes from "./routes/order.route.js";
 import paymentRoutes from "./routes/payment.route.js";
 import reviewRoutes from "./routes/review.route.js";
 import wishlistRoutes from "./routes/wishlist.route.js"
+import addressRoutes from "./routes/address.route.js"
 
 const app = express();
 
@@ -59,12 +60,13 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/products", productRoutes);
 app.use("/api/v1/categories", categoryRoutes);
 app.use("/api/v1/brands", brandRoutes);
-app.use("/api/v1/collections", collectionRoutes)
+app.use("/api/v1/collections", collectionRoutes);
 app.use("/api/v1/carts", cartRoutes);
 app.use("/api/v1/orders", orderRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/reviews", reviewRoutes);
 app.use("/api/v1/wishlist", wishlistRoutes);
+app.use("/api/v1/addresses", addressRoutes);
 
 app.use((req, res) => {
     res.status(404).json({
@@ -72,8 +74,6 @@ app.use((req, res) => {
         message: `Route not found: ${req.method} ${req.originalUrl}`
     });
 });
-
-app.use(errorHandler);
 
 app.use(errorHandler);
 
